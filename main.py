@@ -16,12 +16,14 @@ This app is use to analyze your WhatsApp Chat using the exported text file 📁.
  هيقوم فاتحلك اختيارات كده ف الافضل ارفعه درايف وحمله ع الموقع بعدها😃
 """)
 st.sidebar.markdown("## Upload the text file")
+st.sidebar.markdown("#### Choose whats type")
+type = st.sidebar.selectbox("WhatsApp Type",["سالك","غير سالك"])
 file = st.sidebar.file_uploader("The file",type="txt")
 st.sidebar.markdown("متخفش وربنا مفيش حد هيشوف الداتا 😂 ")
 # start working with the file
 # convert and get the final data
-
-def get_data(file_name):
+@st.cache
+def get_data_not_salek(file_name):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
     #choose only the linse that start with the dataes
@@ -29,22 +31,48 @@ def get_data(file_name):
     chat_lines = []
     for l in lines:
         if len(l) >10 :
-            if (l[0:2].isdigit()) & (l[2] == "/"):
+            if (l[0].isdigit()) & ( "/" in l[0:10]):
                 chat_lines.append((l))
     df = pd.Series(chat_lines).str.split("-",expand=True).iloc[:,0:2]
     df[["sender","message"]] = df[1].str.split(":",expand=True).iloc[:,0:2]
     df.drop([1],axis=1,inplace=True)
     df.columns = ["date","sender","message"]
     df[["date","hour"]] = df["date"].str.split(",",expand=True).iloc[:,0:2]
-    df["date"] = pd.to_datetime(df["date"],format="%d/%m/%Y")
+    df["date"] = pd.to_datetime(df["date"])
     def fucn(s):
         return s.strip().split(":")[0]+ " "+ s.strip().split(" ")[-1]
     df["hour"] = df["hour"].apply(fucn)
     return df
 
+@st.cache
+def get_data_salek(file_name):
+    stringio = StringIO(file_name.getvalue().decode("utf-8"))
+    lines = stringio.readlines()
+    # choose only the linse that start with the dataes
+    lines = (line for line in lines[1:])
+    chat_lines = []
+    for l in lines:
+        if len(l) > 10:
+            if (l[0].isdigit()) & ("/" in l[0:10]):
+                chat_lines.append((l))
+    df = pd.Series(chat_lines).str.split("-", expand=True).iloc[:, 0:2]
+    df[["sender", "message"]] = df[1].str.split(":", expand=True).iloc[:, 0:2]
+    df.drop([1], axis=1, inplace=True)
+    df.columns = ["date", "sender", "message"]
+    df[["date", "hour"]] = df["date"].str.split(",", expand=True).iloc[:, 0:2]
+    df["date"] = pd.to_datetime(df["date"],format = "%d/%m/%Y")
+    def fucn(s):
+        return s.strip().split(":")[0] + " " + s.strip().split(" ")[-1]
+
+    df["hour"] = df["hour"].apply(fucn)
+    return df
+
 try:
     if file :
-        df = get_data(file)
+        if type == "سالك":
+            df = get_data_salek(file)
+        elif type == "غير سالك":
+            df = get_data_not_salek(file)
         st.write("**Sample data** from the chat")
         st.write(df.head())
         st.write("### Which one how send more message ?")
