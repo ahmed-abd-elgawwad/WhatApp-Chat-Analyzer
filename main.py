@@ -23,7 +23,7 @@ st.sidebar.markdown("متخفش وربنا مفيش حد هيشوف الداتا
 # start working with the file
 # convert and get the final data
 @st.cache
-def get_data_not_salek(file_name):
+def get_data_salek(file_name):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
     #choose only the linse that start with the dataes
@@ -45,7 +45,7 @@ def get_data_not_salek(file_name):
     return df
 
 @st.cache
-def get_data_salek(file_name):
+def get_data_not_salek(file_name):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
     # choose only the linse that start with the dataes
