@@ -148,5 +148,5 @@ try:
            st.plotly_chart(fig, use_container_width=True)
        st.info("Made With love ❤ Ahmed Elsayed")
 except:
-    st.error("There is error happend please inform me ")
+    st.error("There is error happend please inform me ,and Make sure you choosed the right WhatsApp Type, idiot.")
 
