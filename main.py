@@ -7,15 +7,15 @@ st.markdown("##### Analyze your chat with others on WhatsApp, know which one of 
 # sidebar
 st.sidebar.markdown("""
 # Options
-بص يابا هتتبع الخطوات دى 👇:
-1) Open the individual chat `only with one person`.
+### Follow the follwing steps
+1) Open the individual chat `Individual or Group`.
 2) Tap options > More > Export chat.
 3) Choose export without media.
  هيقوم فاتحلك اختيارات كده ف الافضل ارفعه درايف وحمله ع الموقع بعدها😃
 """)
-st.sidebar.markdown("## Upload the text file")
-st.sidebar.markdown("#### Choose whats type")
+
 type = st.sidebar.selectbox("WhatsApp Type",["سالك","غير سالك"])
+chat_type =st.sidebar.selectbox("Chat Type",["Group Chat" , "Individual Chat"])
 file = st.sidebar.file_uploader("The file",type="txt")
 st.sidebar.markdown("متخفش وربنا مفيش حد هيشوف الداتا 😂 ")
 # start working with the file
@@ -49,13 +49,43 @@ def get_final(df,month):
     })
     final = ms.melt(id_vars=["date"],value_vars=senders)
     return final
+def get_final_group(df,month):
+    d = df[df["date"].dt.month == month]
+    dates = d["date"].unique()
+    d = d.groupby([d["date"],d["sender"]])["sender"].count().to_frame()
+    senders = list(df.sender.unique())
+    from collections import defaultdict
+    sender_messages = defaultdict(list)
+    for date in dates:
+        if len(d.loc[date].index) == len(senders):
+            for i ,sender in enumerate(senders):
+                sender_messages[sender].append(d.loc[date].loc[sender].values[0])
+        else :
+            # get the sender :
+            senders_less = d.loc[date].index
+            # apped the data for the senders
+            for i ,sender in enumerate(senders_less):
+                sender_messages[sender].append(d.loc[date].loc[sender].values[0])
+            # apped zeros for the rest
+            rest = set(senders) - set(senders_less)
+            for i ,sender in enumerate(rest):
+                sender_messages[sender].append(0)
+    ms = pd.DataFrame(sender_messages)
+    ms["date"]=dates
+    final = ms.melt(id_vars=["date"],value_vars=senders)
+    return final
 #-----------------------------------------------------------------------------------
 @st.cache
-def get_data_salek(file_name):
+def get_data_salek(file_name,chat_type):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
+    #check the chat type
+    if chat_type == "Group Chat":
+        lines = lines[3:]
+    else:
+        lines = lines[1:]
     #choose only the linse that start with the dataes
-    lines = ( line for line in lines[1:] )
+    lines = ( line for line in lines )
     chat_lines = []
     for l in lines:
         if len(l) >10 :
@@ -70,12 +100,20 @@ def get_data_salek(file_name):
     def fucn(s):
         return s.strip().split(":")[0]+ " "+ s.strip().split(" ")[-1]
     df["hour"] = df["hour"].apply(fucn)
+    # removed the unwanted chats
+    if chat_type == "Group Chat":
+        df = df.drop(df[df.sender.str.contains("added | removed")].index)
     return df
 
 @st.cache
-def get_data_not_salek(file_name):
+def get_data_not_salek(file_name,chat_type):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
+    # check the chat type
+    if chat_type == "Group Chat":
+        lines = lines[3:]
+    else:
+        lines = lines[1:]
     # choose only the linse that start with the dataes
     lines = (line for line in lines[1:])
     chat_lines = []
@@ -93,14 +131,17 @@ def get_data_not_salek(file_name):
         return s.strip().split(":")[0] + " " + s.strip().split(" ")[-1]
 
     df["hour"] = df["hour"].apply(fucn)
+    # removed the unwanted chats
+    if chat_type == "Group Chat":
+        df=df.drop(df[df.sender.str.contains("added | removed")].index )
     return df
 
 try:
     if file :
         if type == "سالك":
-            df = get_data_salek(file)
+            df = get_data_salek(file,chat_type)
         elif type == "غير سالك":
-            df = get_data_not_salek(file)
+            df = get_data_not_salek(file,chat_type)
         st.write("**Sample data** from the chat")
         st.write(df.head())
         st.write("### Which one how send more message ?")
@@ -116,7 +157,7 @@ try:
         st.write("### Which hour most chats happen at ?")
         h = df["hour"].value_counts().to_frame()
         h["text"] = h["hour"].astype(str)
-        fig = px.bar(data_frame=h,x=h.index,y= "hour",labels={"index":"Hour ","hour":"","text":"messages "},text="text" ,title="Messages in each hour")
+        fig = px.bar(data_frame=h,x=h.index,y= "hour",labels={"index":"Hour ","hour":"","text":"messages "},text="text" ,title="Messages in each Hour")
         fig.update_traces(textposition='inside')
         fig.update_yaxes(showgrid=False,visible=False)
         fig.update_layout(title_x=.5,margin={"l":0,"r":0})
@@ -128,7 +169,7 @@ try:
         m["text"] = m["sender"].astype(str)
         fig = px.bar(data_frame=m, x=m.index, y="sender",  text="text",
                      labels={"date": "Month ", "sender": "", "text": "messages "},
-                     title="Messages in each hour")
+                     title="Messages in each Month")
         fig.update_traces(textposition='inside')
         fig.update_yaxes(showgrid=False,visible=False)
         fig.update_layout(title_x=.5,margin={"l":0,"r":0})
@@ -142,12 +183,14 @@ try:
                 fig = px.line(x=d.index, y=d.values,title=f"Messages in each day in month { month}",labels={"x":"Date","y":"","text":"messages "})
             if c :
                 # prepare the data
-                final = get_final(df,month)
+                if chat_type == "Group Chat":
+                    final =  get_final_group(df,month)
+                else:
+                    final = get_final(df,month)
                 fig = px.line(data_frame=final, x="date",y="value",color="variable", title=f"Messages in each day in month {month} for each sender",
                               labels={"x": "Date", "value": ""})
             fig.update_layout(title_x=.5,legend_title_text="",legend_orientation="h",legend_y=-.2,legend_x=.3,legend_font_size=10,margin={"l":0,"r":0})
             st.plotly_chart(fig, use_container_width=True)
         st.info("Made With love ❤ Ahmed Elsayed")
 except:
-    st.error("There is error happend please inform me and make sure you choosed the right WhatsApp type, idiot!")
-
+    st.error("There is error happened please inform me and make sure you choose the right options")
