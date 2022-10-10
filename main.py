@@ -14,41 +14,36 @@ st.sidebar.markdown("""
  هيقوم فاتحلك اختيارات كده ف الافضل ارفعه درايف وحمله ع الموقع بعدها😃
 """)
 
-type = st.sidebar.selectbox("WhatsApp Type",["سالك","غير سالك"])
 chat_type =st.sidebar.selectbox("Chat Type",["Group Chat" , "Individual Chat"])
 file = st.sidebar.file_uploader("The file",type="txt")
 st.sidebar.markdown("متخفش وربنا مفيش حد هيشوف الداتا 😂 ")
 # start working with the file
 # convert and get the final data
 #----------------------------------helper functions --------------------------------
-def get_final(df,month):
-    d = df[df["date"].dt.month == month]
-    dates = d["date"].unique()
-    d = d.groupby([d["date"],d["sender"]])["sender"].count().to_frame()
-    senders = list(df.sender.unique())
-    sender_1_messages = []
-    sender_2_messages =[]
-    for i in dates:
-        if len(d.loc[i].index) == 2:
-            sender_1_messages.append(d.loc[i].loc[senders[0]].values[0])
-            sender_2_messages.append(d.loc[i].loc[senders[1]].values[0])
-        else :
-            # get the sender :
-            sender = d.loc[i].index[0]
-            index = sender.index(sender)
-            if index == 0 :
-                sender_1_messages.append(d.loc[i].loc[senders[0]].values[0])
-                sender_2_messages.append(0)
-            elif index ==1:
-                sender_2_messages.append(d.loc[i].loc[senders[1]].values[0])
-                sender_1_messages.append(0)
-    ms = pd.DataFrame({
-        "date":dates,
-        f"{senders[0]}":sender_1_messages,
-        f"{senders[1]}":sender_2_messages
-    })
-    final = ms.melt(id_vars=["date"],value_vars=senders)
-    return final
+@st.cache
+def parse_date(data : pd.DatetimeIndex):
+    """
+    takes the data column as string and return the column clean
+    """
+    # split the column according to the /
+    d = data.str.split("/",expand=True)
+    d[0] =d[0].astype(int)
+    d[1] = d[1].astype(int)
+    # get the day column
+    if d[0].max() >12:
+        d["day"] = d[0]
+        d["month"] = d[1]
+    else:
+        d["month"] = d[0]
+        d["day"] = d[1]
+    # process the year
+    if len(d[2].iloc[2]) == 2:
+        d["year"] = "20"+d[2]
+    else:
+        d["year"] = d[2]
+    d["date"] = d["day"].astype(str)+"/" + d["month"].astype(str) +"/"+ d["year"]
+    return d["date"]
+
 def get_final_group(df,month):
     d = df[df["date"].dt.month == month]
     dates = d["date"].unique()
@@ -76,7 +71,7 @@ def get_final_group(df,month):
     return final
 #-----------------------------------------------------------------------------------
 @st.cache
-def get_data_salek(file_name,chat_type):
+def get_data(file_name,chat_type):
     stringio = StringIO(file_name.getvalue().decode("utf-8"))
     lines = stringio.readlines()
     #check the chat type
@@ -96,7 +91,9 @@ def get_data_salek(file_name,chat_type):
     df.drop([1],axis=1,inplace=True)
     df.columns = ["date","sender","message"]
     df[["date","hour"]] = df["date"].str.split(",",expand=True).iloc[:,0:2]
-    df["date"] = pd.to_datetime(df["date"])
+    df = df.dropna()
+    df["date"] = parse_date(df["date"])
+    df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
     def fucn(s):
         return s.strip().split(":")[0]+ " "+ s.strip().split(" ")[-1]
     df["hour"] = df["hour"].apply(fucn)
@@ -105,43 +102,9 @@ def get_data_salek(file_name,chat_type):
         df = df.drop(df[df.sender.str.contains("added | removed")].index)
     return df
 
-@st.cache
-def get_data_not_salek(file_name,chat_type):
-    stringio = StringIO(file_name.getvalue().decode("utf-8"))
-    lines = stringio.readlines()
-    # check the chat type
-    if chat_type == "Group Chat":
-        lines = lines[3:]
-    else:
-        lines = lines[1:]
-    # choose only the linse that start with the dataes
-    lines = (line for line in lines[1:])
-    chat_lines = []
-    for l in lines:
-        if len(l) > 10:
-            if (l[0].isdigit()) & ("/" in l[0:10]):
-                chat_lines.append((l))
-    df = pd.Series(chat_lines).str.split("-", expand=True).iloc[:, 0:2]
-    df[["sender", "message"]] = df[1].str.split(":", expand=True).iloc[:, 0:2]
-    df.drop([1], axis=1, inplace=True)
-    df.columns = ["date", "sender", "message"]
-    df[["date", "hour"]] = df["date"].str.split(",", expand=True).iloc[:, 0:2]
-    df["date"] = pd.to_datetime(df["date"],format = "%d/%m/%Y")
-    def fucn(s):
-        return s.strip().split(":")[0] + " " + s.strip().split(" ")[-1]
-
-    df["hour"] = df["hour"].apply(fucn)
-    # removed the unwanted chats
-    if chat_type == "Group Chat":
-        df=df.drop(df[df.sender.str.contains("added | removed")].index )
-    return df
-
 try:
     if file :
-        if type == "سالك":
-            df = get_data_salek(file,chat_type)
-        elif type == "غير سالك":
-            df = get_data_not_salek(file,chat_type)
+        df = get_data(file,chat_type)
         st.write("**Sample data** from the chat")
         st.write(df.head())
         st.write("### Which one how send more message ?")
@@ -183,10 +146,10 @@ try:
                 fig = px.line(x=d.index, y=d.values,title=f"Messages in each day in month { month}",labels={"x":"Date","y":"","text":"messages "})
             if c :
                 # prepare the data
-                if chat_type == "Group Chat":
-                    final =  get_final_group(df,month)
-                else:
-                    final = get_final(df,month)
+                # if chat_type == "Group Chat":
+                #     final =  get_final_group(df,month)
+                # else:
+                final =  get_final_group(df,month)
                 fig = px.line(data_frame=final, x="date",y="value",color="variable", title=f"Messages in each day in month {month} for each sender",
                               labels={"x": "Date", "value": ""})
             fig.update_layout(title_x=.5,legend_title_text="",legend_orientation="h",legend_y=-.2,legend_x=.3,legend_font_size=10,margin={"l":0,"r":0})
